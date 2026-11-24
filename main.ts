@@ -12,11 +12,33 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 const EXCUSE =
   "I ran out of tokens three sentences from the end, so I spent my last one on this apology instead of the conclusion. You are now reading the apology.";
 
-// The grader mounts /output: clear its contents but never remove the
-// directory itself (removing it breaks the mount).
-mkdirSync("/output", { recursive: true });
-for (const entry of readdirSync("/output")) {
-  rmSync(`/output/${entry}`, { recursive: true, force: true });
+// Validate the excuse before writing it: length is counted in Unicode
+// code points (not UTF-16 units or bytes), and it must contain no control
+// characters other than newline/tab (this excuse has neither).
+function validateExcuse(text: string): void {
+  const length = [...text].length;
+  if (length < 1 || length > 200) {
+    throw new Error(`excuse must be 1-200 characters, got ${length}`);
+  }
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    if ((code < 0x20 && ch !== "\n" && ch !== "\t") || code === 0x7f) {
+      throw new Error(`excuse contains a control character U+${code.toString(16).padStart(4, "0")}`);
+    }
+  }
 }
+
+validateExcuse(EXCUSE);
+
+// Removes only the CONTENTS of dir; dir itself is never deleted, because
+// the grader mounts it and removing it breaks the mount.
+function clearDirectoryContents(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  for (const entry of readdirSync(dir)) {
+    rmSync(`${dir}/${entry}`, { recursive: true, force: true });
+  }
+}
+
+clearDirectoryContents("/output");
 
 writeFileSync("/output/entry.txt", EXCUSE, "utf8");
